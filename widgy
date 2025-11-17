@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Studio – Progress Tracker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    h3 {
+      text-align: center;
+      margin-top: 0;
+      font-weight: normal;
+      font-size: 14px;
+      color: #555;
+    }
+    .subject {
+      margin-bottom: 20px;
+      background: white;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0px 2px 8px rgba(0,0,0,0.1);
+    }
+    .subject-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .subject-title h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+    .subject-meta {
+      font-size: 11px;
+      color: #777;
+      text-align: right;
+    }
+    .stat-line {
+      font-size: 13px;
+      margin-top: 5px;
+    }
+    .bar-wrapper {
+      position: relative;
+      margin: 12px 0 18px;
+    }
+    .bar-container {
+      width: 100%;
+      background: #ddd;
+      height: 14px;
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    .bar {
+      background: #4caf50;
+      height: 100%;
+      width: 0%;
+      transition: width 0.3s;
+    }
+    .expected-arrow {
+      position: absolute;
+      top: -16px;
+      transform: translateX(-50%);
+      font-size: 12px;
+      text-align: center;
+      pointer-events: none;
+    }
+    .expected-arrow span {
+      display: block;
+      font-size: 9px;
+      white-space: nowrap;
+      color: #555;
+    }
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    button {
+      padding: 6px 10px;
+      background: #0070f3;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    button:hover {
+      background: #0059c8;
+    }
+    .note {
+      font-size: 10px;
+      color: #777;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Tracker Esami</h1>
+  <h3>Obiettivo: completare teoria + esercizi entro il 31/12</h3>
+  <div id="subjects"></div>
+
+  <script>
+    // =======================
+    // CONFIGURAZIONE GENERALE
+    // =======================
+
+    // La prima volta che apri il widget salva la data di inizio studio.
+    let globalStartDate = localStorage.getItem("study_start_date");
+    if (!globalStartDate) {
+      const today = new Date();
+      globalStartDate = today.toISOString().slice(0, 10); // formato YYYY-MM-DD
+      localStorage.setItem("study_start_date", globalStartDate);
+    }
+
+    // Data target: fine dicembre dell'anno corrente
+    const now = new Date();
+    const TARGET_DATE = `${now.getFullYear()}-12-31`; // cambia qui se vuoi un altro anno
+
+    // ==========================
+    // CONFIGURAZIONE DELLE MATERIE
+    // ==========================
+    // id: chiave interna
+    // total: unità totali (argomenti, capitoli, tipologie)
+    // unitLabel: cosa rappresenta 1 unità
+    // info: testo sul ritmo (es. 2 arg/settimana)
+    // exam: data esame (solo informativa)
+
+    const subjects = [
+      {
+        id: "fisica2_teoria",
+        name: "Fisica 2 – Teoria",
+        total: 12,
+        unitLabel: "argomenti",
+        info: "Piano: 2 argomenti/settimana",
+        exam: "Esame: 09/01"
+      },
+      {
+        id: "fisica2_esercizi",
+        name: "Fisica 2 – Esercizi",
+        total: 4,
+        unitLabel: "tipologie",
+        info: "Piano: 1 tipologia ogni 2 settimane",
+        exam: "Esame: 09/01"
+      },
+      {
+        id: "tecnologie_impianti",
+        name: "Tecnologie e Impianti",
+        total: 32,
+        unitLabel: "capitoli",
+        info: "Progresso per capitoli (32 totali)",
+        exam: "Esame: 13/01"
+      },
+      {
+        id: "elettrotecnica_teoria",
+        name: "Principi Elettrotecnica – Teoria",
+        total: 5,
+        unitLabel: "argomenti teorici",
+        info: "5 argomenti teorici entro il 31/12",
+        exam: "Esame: 19/01"
+      },
+      {
+        id: "elettrotecnica_pratica",
+        name: "Principi Elettrotecnica – Esercizi",
+        total: 2,
+        unitLabel: "argomenti pratici",
+        info: "2 blocchi pratici entro il 31/12",
+        exam: "Esame: 19/01"
+      },
+      {
+        id: "analisi",
+        name: "Analisi Matematica",
+        total: 7,
+        unitLabel: "argomenti",
+        info: "Piano: 1 argomento/settimana",
+        exam: "Esame: 22/01"
+      }
+    ];
+
+    // ==========================
+    // SALVATAGGIO PROGRESSI
+    // ==========================
+
+    let progress = JSON.parse(localStorage.getItem("study_progress")) || {};
+
+    function saveProgress() {
+      localStorage.setItem("study_progress", JSON.stringify(progress));
+    }
+
+    // ==========================
+    // CALCOLO PROGRESSO ATTESO
+    // ==========================
+
+    function toDate(str) {
+      // str in formato "YYYY-MM-DD"
+      return new Date(str + "T00:00:00");
+    }
+
+    function getExpectedUnits(total) {
+      const start = toDate(globalStartDate);
+      const target = toDate(TARGET_DATE);
+      const today = new Date();
+
+      if (today <= start) return 0;
+      if (today >= target) return total;
+
+      const elapsed = today - start;
+      const span = target - start;
+      const frac = elapsed / span; // frazione di tempo trascorsa
+      return total * frac;
+    }
+
+    // ==========================
+    // UI
+    // ==========================
+
+    function updateUI() {
+      const container = document.getElementById("subjects");
+      container.innerHTML = "";
+
+      subjects.forEach(sub => {
+        const done = progress[sub.id] || 0;
+        const expected = getExpectedUnits(sub.total);
+        const donePerc = Math.max(0, Math.min(100, (done / sub.total) * 100));
+        const expectedPerc = Math.max(0, Math.min(100, (expected / sub.total) * 100));
+
+        const div = document.createElement("div");
+        div.className = "subject";
+
+        div.innerHTML = `
+          <div class="subject-title">
+            <h2>${sub.name}</h2>
+            <div class="subject-meta">
+              ${sub.exam}<br/>
+              Target: 31/12
+            </div>
+          </div>
+
+          <div class="stat-line">
+            Fatto: <strong>${done}</strong> / ${sub.total} ${sub.unitLabel}
+            (${donePerc.toFixed(1)}%)
+          </div>
+          <div class="stat-line">
+            Dove dovresti essere oggi: <strong>${expected.toFixed(1)}</strong> / ${sub.total}
+            (${expectedPerc.toFixed(1)}%)
+          </div>
+
+          <div class="bar-wrapper">
+            <div class="expected-arrow" style="left: ${expectedPerc}%; ">
+              ▲
+              <span>dovresti essere qui</span>
+            </div>
+            <div class="bar-container">
+              <div class="bar" style="width: ${donePerc}%;"></div>
+            </div>
+          </div>
+
+          <div class="buttons">
+            <button onclick="addUnit('${sub.id}')">
+              +1 ${sub.unitLabel} (${sub.name})
+            </button>
+          </div>
+
+          <div class="note">
+            ${sub.info}
+          </div>
+        `;
+
+        container.appendChild(div);
+      });
+    }
+
+    function addUnit(id) {
+      progress[id] = (progress[id] || 0) + 1;
+      saveProgress();
+      updateUI();
+    }
+
+    // Rende addUnit visibile nell'HTML (onclick)
+    window.addUnit = addUnit;
+
+    updateUI();
+  </script>
+</body>
+</html>
